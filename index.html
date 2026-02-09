@@ -2,8 +2,8 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>錯題紀錄系統 (Firebase版)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>錯題紀錄系統 (雲端題庫版)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/interactjs/dist/interact.min.js"></script>
@@ -11,129 +11,134 @@
 
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&display=swap');
-        body { font-family: 'Noto Sans TC', sans-serif; background-color: #F3F4F6; }
+        body { font-family: 'Noto Sans TC', sans-serif; background-color: #f0f2f5; overscroll-behavior: none; }
         
-        .btn-primary { background-color: #1a5f54; color: white; }
-        .btn-primary:hover { background-color: #134e44; }
-        .dashed-border { border: 2px dashed #fcd34d; background-color: #fffbeb; }
+        /* UI 元件樣式 */
+        .btn-primary { @apply bg-teal-600 text-white hover:bg-teal-700 transition shadow-md; }
+        .btn-secondary { @apply bg-white text-gray-600 border border-gray-300 hover:bg-gray-50 transition; }
+        .tab-active { @apply border-b-2 border-teal-600 text-teal-700 font-bold; }
+        .tab-inactive { @apply text-gray-400 hover:text-gray-600; }
+        
+        /* 畫布背景 */
         .grid-bg {
-            background-image: 
-                linear-gradient(#e5e7eb 1px, transparent 1px),
-                linear-gradient(90deg, #e5e7eb 1px, transparent 1px);
+            background-image: linear-gradient(#e5e7eb 1px, transparent 1px), linear-gradient(90deg, #e5e7eb 1px, transparent 1px);
             background-size: 20px 20px;
         }
-        #pdf-content {
-            width: 176mm; min-height: 250mm; background: white; margin: 0 auto;
-            position: relative; overflow: hidden;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-        }
-        .hidden-section { display: none; }
         
-        /* Loading 動畫 */
-        .loader { border: 3px solid #f3f3f3; border-radius: 50%; border-top: 3px solid #1a5f54; width: 20px; height: 20px; animation: spin 1s linear infinite; }
+        /* B5 紙張 (RWD: 手機上縮小顯示) */
+        #pdf-content {
+            width: 176mm; min-height: 250mm; background: white; 
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            transform-origin: top center;
+        }
+        
+        /* 載入動畫 */
+        .loader { border: 3px solid #f3f3f3; border-radius: 50%; border-top: 3px solid #0d9488; width: 20px; height: 20px; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* 隱藏滾動條但保留功能 */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
 </head>
-<body class="h-screen flex flex-col items-center justify-center">
+<body class="h-screen flex flex-col md:flex-row overflow-hidden">
 
-    <div id="home-section" class="w-full max-w-md bg-white rounded-3xl shadow-xl p-8 text-center transition-all">
-        <div class="mb-6 flex justify-center">
-            <div class="w-20 h-20 bg-teal-50 rounded-2xl flex items-center justify-center">
-                <i class="fa-solid fa-cloud-arrow-up text-3xl text-teal-600"></i>
-            </div>
-        </div>
-        <h1 class="text-2xl font-bold text-gray-800 mb-2">錯題紀錄系統</h1>
-        <p class="text-gray-500 mb-8 text-sm">支援 Firebase 雲端同步功能</p>
-
-        <button onclick="window.openUploadModal()" class="w-full btn-primary py-3 rounded-xl font-bold text-lg mb-4 shadow-lg transition transform hover:scale-105">
-            <i class="fa-solid fa-plus mr-2"></i> 開始製作
-        </button>
-
-        <button onclick="window.goToPreview()" class="w-full bg-white border-2 border-gray-100 text-gray-600 py-3 rounded-xl font-bold text-lg mb-6 hover:bg-gray-50 transition">
-            檢視題本
-        </button>
-
-        <div class="dashed-border rounded-xl p-4 cursor-pointer text-orange-700 font-medium transition hover:bg-orange-50 relative group">
-            <i class="fa-regular fa-clipboard mr-2"></i> 電腦截圖貼上 (Ctrl + V)
-        </div>
-    </div>
-
-    <div id="upload-modal" class="fixed inset-0 bg-black bg-opacity-80 z-50 hidden flex items-center justify-center backdrop-blur-sm">
-        <div class="bg-white w-full max-w-md rounded-2xl p-6 relative">
-            <button onclick="window.closeModal('upload-modal')" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600">
-                <i class="fa-solid fa-times text-xl"></i>
+    <div class="w-full md:w-96 bg-white shadow-xl z-20 flex flex-col h-1/2 md:h-full border-r border-gray-200 order-2 md:order-1">
+        
+        <div class="flex border-b">
+            <button onclick="switchTab('upload')" id="tab-upload" class="flex-1 py-4 text-center tab-active">
+                <i class="fa-solid fa-cloud-arrow-up mr-2"></i>新增題目
             </button>
-            <div class="flex items-center mb-8">
-                <span class="w-8 h-8 rounded-full bg-teal-600 text-white flex items-center justify-center font-bold mr-2">1</span>
-                <span class="text-gray-400">———</span>
-                <span class="w-8 h-8 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center font-bold ml-2">2</span>
-            </div>
-            <div class="border-2 border-dashed border-gray-300 rounded-2xl h-64 flex flex-col items-center justify-center text-center space-y-4 mb-6">
-                <div class="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center text-orange-500 text-2xl mb-2">
-                    <i class="fa-regular fa-paste"></i>
+            <button onclick="switchTab('library')" id="tab-library" class="flex-1 py-4 text-center tab-inactive">
+                <i class="fa-solid fa-folder-open mr-2"></i>從題庫選
+            </button>
+        </div>
+
+        <div id="panel-upload" class="flex-1 p-6 flex flex-col overflow-y-auto">
+            <div class="space-y-4">
+                <div class="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center hover:bg-gray-50 transition cursor-pointer" onclick="document.getElementById('file-input').click()">
+                    <div id="preview-area">
+                        <i class="fa-regular fa-image text-4xl text-gray-300 mb-2"></i>
+                        <p class="text-gray-500 text-sm">點擊選擇相簿照片<br>或是 Ctrl+V 貼上</p>
+                    </div>
+                    <img id="img-preview" class="hidden max-h-40 mx-auto rounded shadow-sm object-contain">
                 </div>
-                <h3 class="text-xl font-bold text-gray-800">請按下 Ctrl + V</h3>
-                <p class="text-gray-500 text-sm">直接貼上電腦截圖，AI 將自動讀取</p>
-                <label class="flex items-center space-x-2 bg-teal-50 px-4 py-2 rounded-lg cursor-pointer border border-teal-100">
-                    <input type="checkbox" id="ai-check" checked class="w-5 h-5 text-teal-600 rounded focus:ring-teal-500">
-                    <span class="text-teal-700 font-medium text-sm">啟用 AI 自動分析</span>
-                </label>
+                <input type="file" id="file-input" class="hidden" accept="image/*" onchange="handleFileSelect(this)">
+
+                <div>
+                    <label class="block text-sm font-bold text-gray-600 mb-2">選擇科目</label>
+                    <select id="upload-subject" class="w-full p-3 border rounded-lg bg-gray-50 focus:ring-2 focus:ring-teal-500 outline-none">
+                        <option value="國文">國文</option>
+                        <option value="英文">英文</option>
+                        <option value="數學">數學</option>
+                        <option value="生物">生物</option>
+                        <option value="理化">理化</option>
+                        <option value="地科">地科</option>
+                        <option value="歷史">歷史</option>
+                        <option value="地理">地理</option>
+                        <option value="公民">公民</option>
+                    </select>
+                </div>
+
+                <button id="btn-upload" onclick="uploadToCloud()" class="w-full py-3 rounded-lg font-bold btn-primary flex justify-center items-center disabled:opacity-50 disabled:cursor-not-allowed">
+                    <i class="fa-solid fa-cloud-upload mr-2"></i> 儲存到雲端題庫
+                </button>
+                <p id="upload-status" class="text-center text-sm text-gray-500 h-5"></p>
+            </div>
+        </div>
+
+        <div id="panel-library" class="hidden flex-1 p-4 flex flex-col overflow-hidden">
+            <div class="mb-4">
+                <label class="text-xs font-bold text-gray-400">篩選科目</label>
+                <select id="filter-subject" onchange="loadQuestions()" class="w-full p-2 border rounded bg-white mt-1">
+                    <option value="all">全部顯示</option>
+                    <option value="國文">國文</option>
+                    <option value="英文">英文</option>
+                    <option value="數學">數學</option>
+                    <option value="生物">生物</option>
+                    <option value="理化">理化</option>
+                    <option value="地科">地科</option>
+                    <option value="歷史">歷史</option>
+                    <option value="地理">地理</option>
+                    <option value="公民">公民</option>
+                </select>
+            </div>
+            
+            <div id="library-grid" class="flex-1 overflow-y-auto grid grid-cols-2 gap-3 pb-4 no-scrollbar">
+                <div class="col-span-2 text-center text-gray-400 py-10">
+                    <i class="fa-solid fa-spinner fa-spin text-2xl mb-2"></i>
+                    <p>載入題庫中...</p>
+                </div>
             </div>
         </div>
     </div>
 
-    <div id="editor-section" class="hidden-section w-full h-full flex flex-col bg-gray-100">
-        <div class="bg-white shadow-sm p-4 flex justify-between items-center z-10">
-            <div class="flex items-center space-x-4">
-                <button onclick="window.goHome()" class="text-gray-500 hover:text-gray-800"><i class="fa-solid fa-arrow-left"></i> 返回</button>
-                <input type="text" id="paper-title" value="112會考社會科" class="font-bold text-lg text-gray-700 border-b border-transparent hover:border-gray-300 focus:outline-none">
-            </div>
-            <div class="flex space-x-2">
-                <button id="btn-save-cloud" onclick="window.saveToFirebase()" class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg shadow flex items-center transition">
-                    <i class="fa-solid fa-cloud-upload-alt mr-2"></i> 儲存到雲端
-                </button>
-                <button onclick="window.downloadPDF()" class="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-lg shadow flex items-center">
-                    <i class="fa-solid fa-file-pdf mr-2"></i> 下載 PDF
-                </button>
-            </div>
+    <div class="flex-1 bg-gray-200 overflow-auto relative flex flex-col order-1 md:order-2 h-1/2 md:h-full">
+        <div class="bg-white p-3 shadow-sm flex justify-between items-center sticky top-0 z-10">
+            <h2 class="font-bold text-gray-700"><i class="fa-solid fa-pen-to-square mr-2"></i>編輯試卷</h2>
+            <button onclick="downloadPDF()" class="bg-gray-800 text-white px-3 py-1.5 rounded text-sm hover:bg-black flex items-center">
+                <i class="fa-solid fa-download mr-1"></i> 下載 B5
+            </button>
         </div>
 
-        <div class="flex flex-1 overflow-hidden">
-            <div class="w-80 bg-white border-r p-6 overflow-y-auto hidden md:block">
-                <h3 class="font-bold text-gray-800 mb-4">題目資訊</h3>
-                <div class="space-y-4">
-                    <div>
-                        <label class="block text-xs font-bold text-gray-500 mb-1">日期</label>
-                        <input type="date" id="meta-date" class="w-full border rounded p-2 text-sm">
-                    </div>
-                    <div>
-                        <label class="block text-xs font-bold text-gray-500 mb-1">科目</label>
-                        <select id="meta-subject" class="w-full border rounded p-2 text-sm bg-white">
-                            <option>公民</option><option>歷史</option><option>地理</option><option>數學</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-xs font-bold text-gray-500 mb-1">核心知識點</label>
-                        <textarea id="meta-note" class="w-full border rounded p-2 text-sm h-24" placeholder="AI 分析中...">國際貿易與匯率、供需法則</textarea>
-                    </div>
-                </div>
-            </div>
-
-            <div class="flex-1 bg-gray-200 overflow-auto p-8 flex justify-center">
-                <div id="pdf-content" class="grid-bg relative">
+        <div class="flex-1 p-4 md:p-8 flex justify-center overflow-auto">
+            <div id="canvas-scaler" style="transform-origin: top center;">
+                <div id="pdf-content" class="grid-bg relative transition-all">
                     <div class="p-8 pb-4 border-b-2 border-gray-800 mb-4 flex justify-between items-end">
                         <div>
                             <h1 class="text-3xl font-bold text-gray-800">錯題筆記</h1>
-                            <p class="text-sm text-gray-500 mt-1">Note System</p>
+                            <p class="text-sm text-gray-500 mt-1">Designed by You</p>
                         </div>
                         <div class="text-right">
-                            <div class="text-4xl font-mono font-bold text-gray-200">NO.01</div>
+                            <input type="text" placeholder="科目/日期" class="text-right text-gray-500 bg-transparent border-none focus:ring-0 text-lg w-40">
                         </div>
                     </div>
-                    <div id="questions-container" class="p-8 pt-0 min-h-[600px]">
-                        <div class="text-gray-300 text-center mt-20 pointer-events-none select-none" id="empty-state">
-                            <i class="fa-regular fa-image text-4xl mb-2"></i>
-                            <p>圖片將顯示於此</p>
+
+                    <div id="questions-container" class="p-8 pt-0 h-[800px]">
+                        <div id="empty-hint" class="text-gray-300 text-center mt-32 pointer-events-none select-none">
+                            <i class="fa-regular fa-hand-point-left text-4xl mb-2 md:hidden"></i>
+                            <i class="fa-regular fa-hand-point-left text-4xl mb-2 hidden md:inline-block rotate-180"></i>
+                            <p>請從「題庫」點選題目<br>加入此頁面</p>
                         </div>
                     </div>
                 </div>
@@ -142,12 +147,11 @@
     </div>
 
     <script type="module">
-        // 1. 引入 Firebase 模組
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
-        import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, query, where, getDocs, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-        // 2. Firebase 設定 (您提供的)
+        // 設定檔
         const firebaseConfig = {
             apiKey: "AIzaSyADCazAIbNTwIdr3VO1Q05sJzvni4rvezA",
             authDomain: "wrong-34862.firebaseapp.com",
@@ -158,155 +162,241 @@
             measurementId: "G-DER4Q7G6YN"
         };
 
-        // 3. 初始化 Firebase
+        // 初始化
         const app = initializeApp(firebaseConfig);
         const storage = getStorage(app);
         const db = getFirestore(app);
 
-        // 暫存圖片 Blob 的陣列 (為了上傳用)
-        let imageBlobs = []; 
+        // 狀態變數
+        let currentUploadBlob = null;
 
-        // === 將功能掛載到 window 以便 HTML onclick 使用 ===
-        
-        window.openUploadModal = () => document.getElementById('upload-modal').classList.remove('hidden');
-        window.closeModal = (id) => document.getElementById(id).classList.add('hidden');
-        
-        window.goHome = () => {
-            document.getElementById('editor-section').classList.add('hidden-section');
-            document.getElementById('home-section').classList.remove('hidden-section');
+        // === 1. 上傳邏輯 (修正轉圈圈) ===
+        window.uploadToCloud = async () => {
+            if (!currentUploadBlob) {
+                alert("請先選擇或貼上照片！");
+                return;
+            }
+
+            const btn = document.getElementById('btn-upload');
+            const status = document.getElementById('upload-status');
+            const subject = document.getElementById('upload-subject').value;
+
+            // 鎖定按鈕，顯示 Loading
+            btn.disabled = true;
+            btn.innerHTML = '<div class="loader mr-2"></div> 上傳中...';
+            status.textContent = "正在上傳圖片...";
+            status.className = "text-center text-sm text-teal-600 h-5";
+
+            try {
+                // A. 上傳圖片到 Storage
+                const fileName = `questions/${Date.now()}.png`;
+                const storageRef = ref(storage, fileName);
+                
+                await uploadBytes(storageRef, currentUploadBlob);
+                const downloadURL = await getDownloadURL(storageRef);
+
+                // B. 寫入 Firestore 資料庫
+                status.textContent = "正在寫入資料庫...";
+                await addDoc(collection(db, "question_bank"), {
+                    imageUrl: downloadURL,
+                    subject: subject,
+                    createdAt: new Date()
+                });
+
+                // C. 成功處理
+                alert(`✅ 成功儲存到「${subject}」題庫！`);
+                resetUploadForm();
+                
+                // 自動切換到題庫並重新整理
+                window.switchTab('library');
+                document.getElementById('filter-subject').value = subject;
+                window.loadQuestions();
+
+            } catch (error) {
+                console.error("Upload Error:", error);
+                alert("❌ 上傳失敗：" + error.message + "\n請確認網路連線或 Firebase 權限設定。");
+            } finally {
+                // D. 無論成功失敗，都要恢復按鈕狀態 (解決無限轉圈)
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fa-solid fa-cloud-upload mr-2"></i> 儲存到雲端題庫';
+                status.textContent = "";
+            }
         };
 
-        window.goToPreview = () => {
-            document.getElementById('home-section').classList.add('hidden-section');
-            document.getElementById('editor-section').classList.remove('hidden-section');
-            // 設定今天日期
-            document.getElementById('meta-date').valueAsDate = new Date();
+        // === 2. 讀取題庫邏輯 ===
+        window.loadQuestions = async () => {
+            const grid = document.getElementById('library-grid');
+            const filter = document.getElementById('filter-subject').value;
+            
+            grid.innerHTML = '<div class="col-span-2 text-center py-4"><div class="loader mx-auto"></div></div>';
+
+            try {
+                let q;
+                const bankRef = collection(db, "question_bank");
+                
+                if (filter === 'all') {
+                    q = query(bankRef, orderBy("createdAt", "desc"), limit(20));
+                } else {
+                    q = query(bankRef, where("subject", "==", filter), orderBy("createdAt", "desc"), limit(20));
+                }
+
+                const querySnapshot = await getDocs(q);
+                
+                grid.innerHTML = ""; // 清空 Loading
+
+                if (querySnapshot.empty) {
+                    grid.innerHTML = '<div class="col-span-2 text-center text-gray-400 py-4">目前沒有題目</div>';
+                    return;
+                }
+
+                querySnapshot.forEach((doc) => {
+                    const data = doc.data();
+                    const div = document.createElement('div');
+                    div.className = "relative group cursor-pointer border rounded-lg overflow-hidden bg-white shadow-sm hover:shadow-md transition aspect-[4/3]";
+                    div.onclick = () => addToCanvas(data.imageUrl);
+                    
+                    div.innerHTML = `
+                        <img src="${data.imageUrl}" class="w-full h-full object-cover">
+                        <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition flex items-center justify-center">
+                            <i class="fa-solid fa-plus text-white opacity-0 group-hover:opacity-100 text-2xl drop-shadow-md"></i>
+                        </div>
+                        <span class="absolute bottom-1 right-1 bg-black bg-opacity-50 text-white text-xs px-1 rounded">${data.subject}</span>
+                    `;
+                    grid.appendChild(div);
+                });
+
+            } catch (error) {
+                console.error("Load Error:", error);
+                // 這裡通常是因為還沒建立 index，如果是測試模式可以忽略
+                if(error.message.includes("requires an index")) {
+                   alert("Firebase 需要建立索引，請檢查 Console 的連結");
+                }
+                grid.innerHTML = '<div class="col-span-2 text-center text-red-400 py-4">讀取失敗，請稍後再試</div>';
+            }
         };
 
-        window.downloadPDF = () => {
-            const element = document.getElementById('pdf-content');
-            html2pdf().set({
-                margin: 0, filename: 'mistake_note.pdf',
-                image: { type: 'jpeg', quality: 0.98 },
-                html2canvas: { scale: 2 },
-                jsPDF: { unit: 'mm', format: 'b5', orientation: 'portrait' }
-            }).from(element).save();
-        };
+        // 初始載入一次
+        window.loadQuestions();
+    </script>
 
-        // === 核心：處理貼上與圖片 ===
-        window.processImage = (blob) => {
+    <script>
+        // Tab 切換
+        function switchTab(tabName) {
+            const uploadTab = document.getElementById('tab-upload');
+            const libraryTab = document.getElementById('tab-library');
+            const uploadPanel = document.getElementById('panel-upload');
+            const libraryPanel = document.getElementById('panel-library');
+
+            if (tabName === 'upload') {
+                uploadTab.className = "flex-1 py-4 text-center tab-active";
+                libraryTab.className = "flex-1 py-4 text-center tab-inactive";
+                uploadPanel.classList.remove('hidden');
+                libraryPanel.classList.add('hidden');
+            } else {
+                uploadTab.className = "flex-1 py-4 text-center tab-inactive";
+                libraryTab.className = "flex-1 py-4 text-center tab-active";
+                uploadPanel.classList.add('hidden');
+                libraryPanel.classList.remove('hidden');
+                // 切換時自動重整
+                if(window.loadQuestions) window.loadQuestions();
+            }
+        }
+
+        // 檔案處理
+        function handleFileSelect(input) {
+            if (input.files && input.files[0]) {
+                processFile(input.files[0]);
+            }
+        }
+
+        function processFile(file) {
+            currentUploadBlob = file; // 存到全域變數準備上傳
+            
             const reader = new FileReader();
             reader.onload = function(e) {
-                // 將 blob 存起來準備上傳
-                imageBlobs.push({ blob: blob, id: Date.now() });
-                
-                addImageToCanvas(e.target.result);
-                window.goToPreview();
+                const img = document.getElementById('img-preview');
+                const area = document.getElementById('preview-area');
+                img.src = e.target.result;
+                img.classList.remove('hidden');
+                area.classList.add('hidden');
             };
-            reader.readAsDataURL(blob);
-        };
+            reader.readAsDataURL(file);
+        }
 
-        // 監聽 Ctrl+V
+        function resetUploadForm() {
+            currentUploadBlob = null;
+            document.getElementById('file-input').value = "";
+            document.getElementById('img-preview').classList.add('hidden');
+            document.getElementById('preview-area').classList.remove('hidden');
+        }
+
+        // 全域貼上監聽
         window.addEventListener('paste', function(e) {
+            // 如果當前在「從題庫選」分頁，自動切回「新增題目」
+            switchTab('upload');
+            
             const items = (e.clipboardData || e.originalEvent.clipboardData).items;
             for (let index in items) {
                 const item = items[index];
                 if (item.kind === 'file' && item.type.includes('image/')) {
-                    const blob = item.getAsFile();
-                    window.processImage(blob);
-                    window.closeModal('upload-modal');
+                    processFile(item.getAsFile());
                 }
             }
         });
 
-        function addImageToCanvas(imgSrc) {
+        // 將題目加入畫布
+        function addToCanvas(url) {
             const container = document.getElementById('questions-container');
-            const emptyState = document.getElementById('empty-state');
-            if(emptyState) emptyState.remove();
+            document.getElementById('empty-hint').style.display = 'none';
 
             const wrapper = document.createElement('div');
             wrapper.className = 'resize-drag absolute touch-none inline-block';
-            wrapper.style.left = '40px'; wrapper.style.top = '40px'; wrapper.style.width = '400px';
-            
+            // 隨機錯開位置避免重疊
+            const randX = Math.floor(Math.random() * 50);
+            const randY = Math.floor(Math.random() * 50);
+            wrapper.style.left = `${40 + randX}px`;
+            wrapper.style.top = `${40 + randY}px`;
+            wrapper.style.width = '300px';
+
             wrapper.innerHTML = `
-                <img src="${imgSrc}" class="w-full h-auto shadow-lg border-2 border-transparent hover:border-teal-500 transition">
-                <button class="absolute -top-3 -right-3 w-6 h-6 bg-red-500 text-white rounded-full text-xs shadow hidden group-hover:block" onclick="this.parentElement.remove()">
+                <img src="${url}" class="w-full h-auto shadow-lg border-2 border-transparent hover:border-teal-500 transition cursor-move">
+                <button class="absolute -top-3 -right-3 w-6 h-6 bg-red-500 text-white rounded-full text-xs shadow z-10" 
+                        onclick="this.parentElement.remove()" 
+                        ontouchend="this.parentElement.remove()">
                     <i class="fa-solid fa-times"></i>
                 </button>
             `;
-            
-            wrapper.onmouseenter = () => wrapper.querySelector('button').classList.remove('hidden');
-            wrapper.onmouseleave = () => wrapper.querySelector('button').classList.add('hidden');
             container.appendChild(wrapper);
         }
 
-        // === Firebase 儲存邏輯 ===
-        window.saveToFirebase = async () => {
-            const btn = document.getElementById('btn-save-cloud');
-            const originalText = btn.innerHTML;
+        // 下載 PDF
+        function downloadPDF() {
+            const element = document.getElementById('pdf-content');
+            // 暫時移除縮放以確保清晰度
+            const originalTransform = element.style.transform;
+            element.style.transform = 'none';
             
-            // 1. UI 變更為 Loading
-            btn.innerHTML = '<div class="loader mr-2"></div> 上傳中...';
-            btn.disabled = true;
+            html2pdf().set({
+                margin: 0,
+                filename: '錯題筆記.pdf',
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: { scale: 2, useCORS: true }, // useCORS 重要！否則 Firebase 圖片無法下載
+                jsPDF: { unit: 'mm', format: 'b5', orientation: 'portrait' }
+            }).from(element).save().then(() => {
+                element.style.transform = originalTransform;
+            });
+        }
 
-            try {
-                // 收集表單資料
-                const title = document.getElementById('paper-title').value;
-                const subject = document.getElementById('meta-subject').value;
-                const date = document.getElementById('meta-date').value;
-                const note = document.getElementById('meta-note').value;
-                let uploadedImageUrls = [];
-
-                // 2. 上傳所有圖片到 Storage
-                if (imageBlobs.length > 0) {
-                    for (let item of imageBlobs) {
-                        const fileName = `images/${Date.now()}_${Math.random().toString(36).substring(7)}.png`;
-                        const storageRef = ref(storage, fileName);
-                        
-                        // 上傳
-                        const snapshot = await uploadBytes(storageRef, item.blob);
-                        // 取得下載連結
-                        const url = await getDownloadURL(snapshot.ref);
-                        uploadedImageUrls.push(url);
-                    }
-                } else {
-                    console.log("沒有新圖片需要上傳");
-                }
-
-                // 3. 寫入資料庫 Firestore
-                const docRef = await addDoc(collection(db, "questions"), {
-                    title: title,
-                    subject: subject,
-                    date: date,
-                    note: note,
-                    images: uploadedImageUrls,
-                    createdAt: serverTimestamp()
-                });
-
-                console.log("Document written with ID: ", docRef.id);
-                alert("✅ 雲端儲存成功！");
-                
-                // 清空已上傳陣列避免重複上傳 (簡單實作)
-                imageBlobs = []; 
-
-            } catch (e) {
-                console.error("Error adding document: ", e);
-                alert("❌ 儲存失敗，請檢查 Console 或確認 Firebase 權限設定 (Test Mode)。\n錯誤訊息: " + e.message);
-            } finally {
-                // 復原按鈕
-                btn.innerHTML = originalText;
-                btn.disabled = false;
-            }
-        };
-
-        // Interact.js 設定 (維持不變)
-        interact('.resize-drag').draggable({
-            listeners: { move: dragMoveListener },
-            modifiers: [ interact.modifiers.restrictRect({ restriction: 'parent', endOnly: true }) ]
-        }).resizable({
-            edges: { left: true, right: true, bottom: true, top: true },
-            listeners: { move: resizeMoveListener }
-        });
+        // Interact.js 設定 (拖拉與縮放)
+        interact('.resize-drag')
+            .draggable({
+                listeners: { move: dragMoveListener },
+                modifiers: [ interact.modifiers.restrictRect({ restriction: 'parent', endOnly: true }) ]
+            })
+            .resizable({
+                edges: { left: true, right: true, bottom: true, top: true },
+                listeners: { move: resizeMoveListener }
+            });
 
         function dragMoveListener (event) {
             var target = event.target;
@@ -322,6 +412,23 @@
             Object.assign(target.style, { width: `${event.rect.width}px`, height: `${event.rect.height}px`, transform: `translate(${x}px, ${y}px)` });
             Object.assign(target.dataset, { x, y });
         }
+
+        // 手機版自動縮放畫布以適應螢幕
+        function scaleCanvas() {
+            if(window.innerWidth < 768) {
+                const scaler = document.getElementById('canvas-scaler');
+                const parentWidth = scaler.parentElement.clientWidth;
+                const pdfWidth = 176 * 3.78; // B5 mm to px approx
+                const scale = (parentWidth - 32) / pdfWidth; // 32 is padding
+                scaler.style.transform = `scale(${scale})`;
+                scaler.style.height = `${(250 * 3.78) * scale}px`; // Adjust height container
+            } else {
+                 document.getElementById('canvas-scaler').style.transform = 'none';
+                 document.getElementById('canvas-scaler').style.height = 'auto';
+            }
+        }
+        window.addEventListener('resize', scaleCanvas);
+        window.onload = scaleCanvas;
     </script>
 </body>
 </html>
